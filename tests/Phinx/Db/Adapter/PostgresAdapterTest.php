@@ -183,6 +183,18 @@ class PostgresAdapterTest extends \PHPUnit_Framework_TestCase
         $this->assertTrue($this->adapter->hasIndex('table1', array('email')));
         $this->assertFalse($this->adapter->hasIndex('table1', array('email', 'user_email')));
     }
+    
+    public function testCreateTableWithSerialDataType()
+    {
+        $table = new \Phinx\Db\Table('users', array(), $this->adapter);
+        $table->addColumn('name', 'string')
+              ->addColumn('email', 'string')
+              ->addIndex('email', array('unique' => true))
+              ->save();
+        
+        $columns = $table->getColumns();
+        $this->assertTrue($columns[0]->isIdentity());
+    }
       
     public function testRenameTable()
     {

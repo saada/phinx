@@ -804,7 +804,7 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
                  ? '(' . ($column->getLimit() ? $column->getLimit() : $sqlType['limit']) . ')' : '';
         }
         $def .= ($column->isNull() == false) ? ' NOT NULL' : ' NULL';
-        $def .= ($column->isIdentity()) ? '' : '';
+        $def = $column->isIdentity() ? 'SERIAL' : strtoupper($sqlType['name']);
         $default = $column->getDefault();
         if (is_numeric($default)) {
             $def .= ' DEFAULT ' . $column->getDefault();
