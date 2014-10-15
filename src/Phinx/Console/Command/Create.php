@@ -3,7 +3,7 @@
  * Phinx
  *
  * (The MIT license)
- * Copyright (c) 2013 Rob Morgan
+ * Copyright (c) 2014 Rob Morgan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated * documentation files (the "Software"), to
@@ -29,10 +29,8 @@
 namespace Phinx\Console\Command;
 
 use Phinx\Migration\Util;
-use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
     
 class Create extends AbstractCommand
@@ -56,7 +54,11 @@ class Create extends AbstractCommand
 
     /**
      * Migrate the database.
-     * 
+     *
+     * @param InputInterface $input
+     * @param OutputInterface $output
+     * @throws \RuntimeException
+     * @throws \InvalidArgumentException
      * @return void
      */
     protected function execute(InputInterface $input, OutputInterface $output)

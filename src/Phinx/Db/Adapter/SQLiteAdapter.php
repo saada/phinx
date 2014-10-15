@@ -3,7 +3,7 @@
  * Phinx
  *
  * (The MIT license)
- * Copyright (c) 2013 Rob Morgan
+ * Copyright (c) 2014 Rob Morgan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated * documentation files (the "Software"), to
@@ -62,18 +62,15 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                 // @codeCoverageIgnoreEnd
             }
             
-            $dsn = '';
             $db = null;
             $options = $this->getOptions();
             
             // if port is specified use it, otherwise use the MySQL default
             if (isset($options['memory'])) {
-                $dsn = 'sqlite:memory:';
+                $dsn = 'sqlite::memory:';
             } else {
                 $dsn = 'sqlite:' . $options['name'] . '.sqlite3';
             }
-
-            $driverOptions = array(\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION);
 
             try {
                 $db = new \PDO($dsn);
@@ -154,8 +151,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function hasTable($tableName)
     {
-        $options = $this->getOptions();
-        
         $tables = array();
         $rows = $this->fetchAll(sprintf('SELECT name FROM sqlite_master WHERE type=\'table\' AND name=\'%s\'', $tableName));
         foreach ($rows as $row) {
@@ -182,7 +177,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                    ->setIdentity(true);
             
             array_unshift($columns, $column);
-            $options['primary_key'] = 'id';
 
         } elseif (isset($options['id']) && is_string($options['id'])) {
             // Handle id => "field_name" to support AUTO_INCREMENT
@@ -192,7 +186,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                    ->setIdentity(true);
 
             array_unshift($columns, $column);
-            $options['primary_key'] = $options['id'];
         }
         
         
@@ -288,9 +281,9 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             $column->setType($phinxType['name'])
                    ->setLimit($phinxType['limit']);
 
-            // if ($columnInfo['Extra'] == 'auto_increment') {
-            //     $column->setIdentity(true);
-            // }
+            if ($columnInfo['pk'] == 1) {
+                $column->setIdentity(true);
+            }
 
             $columns[] = $column;
         }
@@ -305,7 +298,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $rows = $this->fetchAll(sprintf('pragma table_info(%s)', $this->quoteTableName($tableName)));
         foreach ($rows as $column) {
-            if (strtolower($column['name']) == strtolower($columnName)) {
+            if (strcasecmp($column['name'], $columnName) === 0) {
                 return true;
             }
         }
@@ -341,6 +334,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $rows = $this->fetchAll('select * from sqlite_master where `type` = \'table\'');
 
+        $sql = '';
         foreach ($rows as $table) {
             if ($table['tbl_name'] == $tableName) {
                 $sql = $table['sql'];
@@ -383,6 +377,8 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $this->execute($sql);
 
+        $this->execute(sprintf('DROP TABLE %s', $this->quoteTableName($tmpTableName)));
+        $this->endCommandTimer();
     }
     
     /**
@@ -400,6 +396,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $rows = $this->fetchAll('select * from sqlite_master where `type` = \'table\'');
 
+        $sql = '';
         foreach ($rows as $table) {
             if ($table['tbl_name'] == $tableName) {
                 $sql = $table['sql'];
@@ -424,9 +421,11 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $this->execute(sprintf('ALTER TABLE %s RENAME TO %s', $tableName, $tmpTableName));
 
+        $val = end($columns);
+        $replacement = ($val['name'] === $columnName) ? "%s %s" : "%s %s,";
         $sql = preg_replace(
-            sprintf("/%s[^,]*/", $this->quoteColumnName($columnName)),
-            sprintf("%s %s", $this->quoteColumnName($newColumn->getName()), $this->getColumnSqlDefinition($newColumn)),
+            sprintf("/%s[^,]*[^\)]/", $this->quoteColumnName($columnName)),
+            sprintf($replacement, $this->quoteColumnName($newColumn->getName()), $this->getColumnSqlDefinition($newColumn)),
             $sql
         );
 
@@ -442,7 +441,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $this->execute($sql);
         $this->execute(sprintf('DROP TABLE %s', $this->quoteTableName($tmpTableName)));
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
     
     /**
@@ -459,6 +458,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $rows = $this->fetchAll('select * from sqlite_master where `type` = \'table\'');
 
+        $sql = '';
         foreach ($rows as $table) {
             if ($table['tbl_name'] == $tableName) {
                 $sql = $table['sql'];
@@ -467,11 +467,13 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $rows = $this->fetchAll(sprintf('pragma table_info(%s)', $this->quoteTableName($tableName)));
         $columns = array();
+        $columnType = null;
         foreach ($rows as $row) {
             if ($row['name'] != $columnName) {
                 $columns[] = $row['name'];
             } else {
                 $found = true;
+                $columnType = $row['type'];
             }
         }
 
@@ -484,10 +486,14 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         $this->execute(sprintf('ALTER TABLE %s RENAME TO %s', $tableName, $tmpTableName));
 
         $sql = preg_replace(
-            sprintf("/%s[^,]*/", $this->quoteColumnName($columnName)),
-            '',
+            sprintf("/%s\s%s[^,)]*(,\s|\))/", preg_quote($this->quoteColumnName($columnName)), preg_quote($columnType)),
+            "",
             $sql
         );
+
+        if (substr($sql, -2) === ', ') {
+            $sql = substr($sql, 0, -2) . ')';
+        }
 
         $this->execute($sql);
 
@@ -501,7 +507,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $this->execute($sql);
         $this->execute(sprintf('DROP TABLE %s', $this->quoteTableName($tmpTableName)));
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
     
     /**
@@ -556,24 +562,20 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $this->startCommandTimer();
         $this->writeCommand('addIndex', array($table->getName(), $index->getColumns()));
-        $indexName = '';
         $indexColumnArray = array();
         foreach ($index->getColumns() as $column) {
-            $indexName .= $column . '_';
             $indexColumnArray []= sprintf('`%s` ASC', $column);
         }
-        $indexName .= 'index';
         $indexColumns = implode(',', $indexColumnArray);
-        $result = $this->execute(
+        $this->execute(
             sprintf(
-                'CREATE %s `%s` ON %s (%s)',
+                'CREATE %s ON %s (%s)',
                 $this->getIndexSqlDefinition($index),
-                $indexName,
                 $this->quoteTableName($table->getName()),
                 $indexColumns
             )
         );
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
     
     /**
@@ -590,7 +592,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         $indexes = $this->getIndexes($tableName);
         $columns = array_map('strtolower', $columns);
         
-        foreach ($indexes as $tableName => $index) {
+        foreach ($indexes as $index) {
             $a = array_diff($columns, $index['columns']);
             if (empty($a)) {
                 $this->execute(
@@ -599,7 +601,32 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                         $this->quoteColumnName($index['index'])
                     )
                 );
-                return $this->endCommandTimer();
+                $this->endCommandTimer();
+                return;
+            }
+        }
+    }
+    
+    /**
+     * {@inheritdoc}
+     */
+    public function dropIndexByName($tableName, $indexName)
+    {
+        $this->startCommandTimer();
+        
+        $this->writeCommand('dropIndexByName', array($tableName, $indexName));
+        $indexes = $this->getIndexes($tableName);
+        
+        foreach ($indexes as $index) {
+            if ($indexName == $index['index']) {
+                $this->execute(
+                    sprintf(
+                        'DROP INDEX %s',
+                        $this->quoteColumnName($indexName)
+                    )
+                );
+                $this->endCommandTimer();
+                return;
             }
         }
     }
@@ -672,13 +699,14 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         $tmpTableName = 'tmp_' . $table->getName();
         $rows = $this->fetchAll('select * from sqlite_master where `type` = \'table\'');
 
+        $sql = '';
         foreach ($rows as $row) {
             if ($row['tbl_name'] == $table->getName()) {
                 $sql = $row['sql'];
             }
         }
 
-        $rows = $this->fetchAll(sprintf('pragma table_info(%s)', $this->quoteTableName($table->getName())));
+        $this->fetchAll(sprintf('pragma table_info(%s)', $this->quoteTableName($table->getName())));
         $columns = array();
         foreach ($columns as $column) {
             $columns[] = $this->quoteColumnName($column['name']);
@@ -699,7 +727,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $this->execute($sql);
         $this->execute(sprintf('DROP TABLE %s', $this->quoteTableName($tmpTableName)));
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
 
     /**
@@ -720,6 +748,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $rows = $this->fetchAll('select * from sqlite_master where `type` = \'table\'');
 
+        $sql = '';
         foreach ($rows as $table) {
             if ($table['tbl_name'] == $tableName) {
                 $sql = $table['sql'];
@@ -738,7 +767,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         if (!isset($found)) {
             throw new \InvalidArgumentException(sprintf(
-                'The specified column doesn\'t exist: ' . $columnName
+                'The specified column doesn\'t exist: '
             ));
         }
 
@@ -759,7 +788,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $this->execute($sql);
         $this->execute(sprintf('DROP TABLE %s', $this->quoteTableName($tmpTableName)));
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
     
     /**
@@ -768,44 +797,57 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     public function getSqlType($type)
     {
         switch ($type) {
-            case 'primary_key':
-                return self::DEFAULT_PRIMARY_KEY;
-            case 'string':
+            case static::PHINX_TYPE_STRING:
                 return array('name' => 'varchar', 'limit' => 255);
                 break;
-            case 'text':
+            case static::PHINX_TYPE_CHAR:
+                return array('name' => 'char', 'limit' => 255);
+                break;
+            case static::PHINX_TYPE_TEXT:
                 return array('name' => 'text');
                 break;
-            case 'integer':
-                return array('name' => 'int');
+            case static::PHINX_TYPE_INTEGER:
+                return array('name' => 'integer');
                 break;
-            case 'biginteger':
+            case static::PHINX_TYPE_BIG_INTEGER:
                 return array('name' => 'bigint');
                 break;
-            case 'float':
+            case static::PHINX_TYPE_FLOAT:
                 return array('name' => 'float');
                 break;
-            case 'decimal':
+            case static::PHINX_TYPE_DECIMAL:
                 return array('name' => 'decimal');
                 break;
-            case 'datetime':
+            case static::PHINX_TYPE_DATETIME:
                 return array('name' => 'datetime');
                 break;
-            case 'timestamp':
+            case static::PHINX_TYPE_TIMESTAMP:
                 return array('name' => 'datetime');
                 break;
-            case 'time':
+            case static::PHINX_TYPE_TIME:
                 return array('name' => 'time');
                 break;
-            case 'date':
+            case static::PHINX_TYPE_DATE:
                 return array('name' => 'date');
                 break;
-            case 'binary':
+            case static::PHINX_TYPE_BINARY:
                 return array('name' => 'blob');
                 break;
-            case 'boolean':
+            case static::PHINX_TYPE_BOOLEAN:
                 return array('name' => 'boolean');
                 break;
+            // Geospatial database types
+            // No specific data types exist in SQLite, instead all geospatial
+            // functionality is handled in the client. See also: SpatiaLite.
+            case static::PHINX_TYPE_GEOMETRY:
+            case static::PHINX_TYPE_POLYGON:
+                return array('name' => 'text');
+                return;
+            case static::PHINX_TYPE_LINESTRING:
+                return array('name' => 'varchar', 'limit' => 255);
+                break;
+            case static::PHINX_TYPE_POINT:
+                return array('name' => 'float');
             default:
                 throw new \RuntimeException('The type: "' . $type . '" is not supported.');
         }
@@ -833,13 +875,19 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             }
             switch ($matches[1]) {
                 case 'varchar':
-                    $type = 'string';
+                    $type = static::PHINX_TYPE_STRING;
+                    if ($limit == 255) {
+                        $limit = null;
+                    }
+                    break;
+                case 'char':
+                    $type = static::PHINX_TYPE_CHAR;
                     if ($limit == 255) {
                         $limit = null;
                     }
                     break;
                 case 'int':
-                    $type = 'integer';
+                    $type = static::PHINX_TYPE_INTEGER;
                     if ($limit == 11) {
                         $limit = null;
                     }
@@ -848,15 +896,15 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                     if ($limit == 11) {
                         $limit = null;
                     }
-                    $type = 'biginteger';
+                    $type = static::PHINX_TYPE_BIG_INTEGER;
                     break;
                 case 'blob':
-                    $type = 'binary';
+                    $type = static::PHINX_TYPE_BINARY;
                     break;
             }
             if ($type == 'tinyint') {
                 if ($matches[3] == 1) {
-                    $type = 'boolean';
+                    $type = static::PHINX_TYPE_BOOLEAN;
                     $limit = null;
                 }
             }
@@ -879,7 +927,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         $this->startCommandTimer();
         $this->writeCommand('createDatabase', array($name));
         touch($name . '.sqlite3');
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
     
     /**
@@ -900,7 +948,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         if (file_exists($name . '.sqlite3')) {
             unlink($name . '.sqlite3');
         }
-        return $this->endCommandTimer();
+        $this->endCommandTimer();
     }
     
     /**
@@ -931,6 +979,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                 $def .= ' DEFAULT '  . $column->getDefault();
             }
         }
+        $def .= ($column->isIdentity()) ? ' PRIMARY KEY AUTOINCREMENT' : '';
 
         if ($column->getUpdate()) {
             $def .= ' ON UPDATE ' . $column->getUpdate();
@@ -952,6 +1001,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         if ($column->getComment()) {
             return ' /* ' . $column->getComment() . ' */ ';
         }
+        return '';
     }
     
     /**
@@ -963,9 +1013,21 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     protected function getIndexSqlDefinition(Index $index)
     {
         if ($index->getType() == Index::UNIQUE) {
-            return 'UNIQUE INDEX';
+            $def = 'UNIQUE INDEX';
+        } else {
+            $def = 'INDEX';
         }
-        return 'INDEX';
+        if (is_string($index->getName())) {
+            $indexName = $index->getName();
+        } else {
+            $indexName = '';
+            foreach ($index->getColumns() as $column) {
+                $indexName .= $column . '_';
+            }
+            $indexName .= 'index';
+        }
+        $def .= ' `' . $indexName . '`';
+        return $def;
     }
 
     /**

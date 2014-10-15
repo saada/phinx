@@ -3,7 +3,7 @@
  * Phinx
  *
  * (The MIT license)
- * Copyright (c) 2013 Rob Morgan
+ * Copyright (c) 2014 Rob Morgan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated * documentation files (the "Software"), to
@@ -30,7 +30,6 @@ namespace Phinx\Migration;
 
 use Phinx\Db\Table;
 use Phinx\Db\Adapter\AdapterInterface;
-use Phinx\Migration\MigrationInterface;
 
 /**
  * Abstract Migration Class. 
@@ -53,13 +52,12 @@ abstract class AbstractMigration implements MigrationInterface
      * @var AdapterInterface
      */
     protected $adapter;
-    
+
     /**
      * Class Constructor.
      *
      * @param int $version Migration Version
-     * @return void
-      */
+     */
     final public function __construct($version)
     {
         $this->version = $version;

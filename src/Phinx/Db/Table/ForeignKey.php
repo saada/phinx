@@ -3,7 +3,7 @@
  * Phinx
  *
  * (The MIT license)
- * Copyright (c) 2013 Rob Morgan
+ * Copyright (c) 2014 Rob Morgan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated * documentation files (the "Software"), to
@@ -207,6 +207,7 @@ class ForeignKey
      * Utility method that maps an array of index options to this objects methods.
      *
      * @param array $options Options
+     * @throws \RuntimeException
      * @return ForeignKey
      */
     public function setOptions($options)
@@ -219,9 +220,9 @@ class ForeignKey
             }
 
             // handle $options['delete'] as $options['update']
-            if (strtolower($option) == 'delete' || strtolower($option) == 'update') {
-                if (defined('self::' . strtoupper($value))) {
-                    $this->{'setOn' . ucfirst(strtolower($option))}(constant('self::' . strtoupper($value)));
+            if (strcasecmp($option, 'delete') === 0 || strcasecmp($option, 'update') === 0) {
+                if (defined('static::' . strtoupper($value))) {
+                    $this->{'setOn' . ucfirst(strtolower($option))}(constant('static::' . strtoupper($value)));
                 }
             } else {
                 $method = 'set' . ucfirst($option);

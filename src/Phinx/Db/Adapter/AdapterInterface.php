@@ -3,7 +3,7 @@
  * Phinx
  *
  * (The MIT license)
- * Copyright (c) 2013 Rob Morgan
+ * Copyright (c) 2014 Rob Morgan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated * documentation files (the "Software"), to
@@ -42,6 +42,29 @@ use Phinx\Migration\MigrationInterface;
  */
 interface AdapterInterface
 {
+    const PHINX_TYPE_STRING         = 'string';
+    const PHINX_TYPE_CHAR           = 'char';
+    const PHINX_TYPE_TEXT           = 'text';
+    const PHINX_TYPE_INTEGER        = 'integer';
+    const PHINX_TYPE_BIG_INTEGER    = 'biginteger';
+    const PHINX_TYPE_FLOAT          = 'float';
+    const PHINX_TYPE_DECIMAL        = 'decimal';
+    const PHINX_TYPE_DATETIME       = 'datetime';
+    const PHINX_TYPE_TIMESTAMP      = 'timestamp';
+    const PHINX_TYPE_TIME           = 'time';
+    const PHINX_TYPE_DATE           = 'date';
+    const PHINX_TYPE_BINARY         = 'binary';
+    const PHINX_TYPE_BOOLEAN        = 'boolean';
+    const PHINX_TYPE_JSON           = 'json';
+    const PHINX_TYPE_UUID           = 'uuid';
+    const PHINX_TYPE_FILESTREAM     = 'filestream';
+
+    // Geospatial database types
+    const PHINX_TYPE_GEOMETRY       = 'geometry';
+    const PHINX_TYPE_POINT          = 'point';
+    const PHINX_TYPE_LINESTRING     = 'linestring';
+    const PHINX_TYPE_POLYGON        = 'polygon';
+
     /**
      * Get all migrated version numbers.
      *
@@ -302,6 +325,15 @@ interface AdapterInterface
      * @return void
      */
     public function dropIndex($tableName, $columns);
+    
+    /**
+     * Drops the index specified by name from a database table.
+     * 
+     * @param string $tableName
+     * @param string $indexName
+     * @return void
+     */
+    public function dropIndexByName($tableName, $indexName);
 
     /**
      * Checks to see if a foreign key exists.
